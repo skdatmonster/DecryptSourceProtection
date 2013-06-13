@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>RSLogix 5000 Source Protection Decryption</title>
+<script src="https://crypto-js.googlecode.com/svn/tags/3.1.2/build/rollups/aes.js"></script>
+<script src="https://crypto-js.googlecode.com/svn/tags/3.1.2/build/rollups/sha256.js"></script>
+<script src="https://crypto-js.googlecode.com/svn/tags/3.1.2/build/components/enc-utf16-min.js"></script>
+<script>
+"use strict";
+var xpath = "//EncodedData|//*[@EncodedSourceKey]";
+var keymatl = '\x59\x00\x53\x00\x33\x00\x3F\x00\x43\x00\x4E\x00\x21\x00\x40\x00\x42\x00\x73\x00\x49\x00\x74\x00\x39\x00\x6C\x00\x70\x00\x2D\x00\x3D\x00\x43\x00\x4A\x00\x32\x00\x30\x00\x65\x00\x4C\x00\x45\x00\x76\x00\x21\x00\x5A\x00\x64\x00\x49\x00\x53\x00\x33\x00\x25\x00\x68\x00\x52\x00\x6B\x00\x47\x00\x70\x00\x57\x00\x72\x00\x79\x00\x4F\x00\x59\x00\x21\x00\x6C\x00\x69\x00\x21\x00\x4C\x00\x2F\x00\x6E\x00\x38\x00\x5F\x00\x23\x00\x2A\x00\x76\x00\x34\x00\x2E\x00\x48\x00\x7A\x00\x57\x00\x48\x00\x2D\x00\x70\x00\x34\x00\x76\x00';
+function print(text, color) {
+  var output = document.getElementById('output');
+  var span = document.createElement('span');
+  span.style.color = color;
+  span.appendChild(document.createTextNode(text));
+  output.appendChild(span);
+  output.appendChild(document.createElement('br'));
+}
+function decrypt(b64text, format) {
+  var ciphertext = CryptoJS.enc.Base64.parse(b64text);
+  var key = CryptoJS.SHA256(keymatl);
+  var iv = CryptoJS.lib.WordArray.create([0, 0, 0, 0]);
+  var options = {iv: iv, mode: CryptoJS.mode.CBC};
+  var decryptor = CryptoJS.algo.AES.createDecryptor(key, options);
+  var part1 = decryptor.process(ciphertext);
+  var part2 = decryptor.finalize();
+  var plaintext = part1.toString(format) + part2.toString(format);
+  if (plaintext.length == 0 && ciphertext.words.length > 0) {
+    print('Decryption was unsuccessful', 'red');
+  }
+  return plaintext;
+}
+function patchXML(data) {
+  try {
+    var doc = new DOMParser().parseFromString(data, 'application/xml');
+    var flag = true;
+    while (flag)
+    {
+      var result = doc.evaluate(xpath, doc, null, XPathResult.ANY_UNORDERED_NODE_TYPE, null);
+      var element = result.singleNodeValue;
+      if (element == null) {
+        flag = false;
+        continue;
+      }
+      if (element.tagName == 'EncodedData') {
+        if (element.getAttribute('EncryptionConfig') != '3') {
+          print('Warning: An unsupported EncryptionConfig value was found. Decryption may not work', 'orange');
+        }
+        var list = [];
+        for (var i = 0; i < element.childNodes.length; i++) {
+          var child = element.childNodes[i];
+          if (child.nodeType == Node.TEXT_NODE) {
+            list.push(child.nodeValue.replace(/\n/g, ''));
+          }
+        }
+        var decoded = decrypt(list.join(''), CryptoJS.enc.Utf16LE);
+        var subdoc = new DOMParser().parseFromString(decoded, 'application/xml');
+        for (var i = 0; i < subdoc.childNodes.length; i++) {
+          var imported = doc.importNode(subdoc.childNodes[i], true);
+          element.parentNode.insertBefore(imported, element);
+        }
+        element.parentNode.removeChild(element);
+        print('Unpacked encoded data', 'green');
+      } else if (element.hasAttribute('EncodedSourceKey')) {
+        var decoded = decrypt(element.getAttribute('EncodedSourceKey'), CryptoJS.enc.Latin1);
+        element.removeAttribute('EncodedSourceKey');
+        if (element.hasAttribute('SourceProtectionType')) {
+          element.removeAttribute('SourceProtectionType');
+        }
+        if (element.hasAttribute('EditedDate')) {
+          var date = new Date(element.getAttribute('EditedDate'));
+          date.setMilliseconds(1 + date.getMilliseconds());
+          element.setAttribute('EditedDate', date.toISOString());
+        }
+        print('Found source key: "' + decoded + '"', 'green');
+      }
+    }
+    return new XMLSerializer().serializeToString(doc);
+  } catch (e) {
+    print('Exception caught: ' + e, 'red');
+    console.log(e);
+    throw e;
+  }
+}
+function handleDrop(event) {
+  if (event.dataTransfer.files.length == 1) {
+    var file = event.dataTransfer.files[0];
+    var fr = new FileReader();
+    fr.addEventListener('load', function(frevent) {
+      var textin = document.getElementById('textin');
+      var textout = document.getElementById('textout');
+      textin.value = frevent.target.result;
+      textout.value = patchXML(frevent.target.result);
+      textout.focus();
+      textout.select();
+    }, true);
+    fr.readAsText(file);
+  }
+}
+document.addEventListener('DOMContentLoaded', function(event) {
+  document.getElementById('button').addEventListener('click', function(event) {
+    var textin = document.getElementById('textin');
+    var textout = document.getElementById('textout');
+    textout.value = patchXML(textin.value);
+    textout.focus();
+    textout.select();
+  }, true);
+  document.body.addEventListener('dragover', function(event) {
+    event.preventDefault();
+  }, true);
+  document.body.addEventListener('drop', function(event) {
+    event.preventDefault();
+    handleDrop(event);
+  }, true);
+}, true);
+</script>
+</head>
+<body>
+<form><table><tr>
+  <td>
+    <label for="textin">Input (with encrypted sections)</label>
+    <br />
+    <textarea id="textin" name="textin" rows="10" cols="40" placeholder="Paste the text of your exported XML here (starts with <?xml version=...)"></textarea>
+  </td>
+  <td style="vertical-align: middle;">
+    <button id="button">Decrypt &rarr;</button>
+  </td>
+  <td>
+    <label for="textout">Output (decrypted)</label>
+    <br />
+    <textarea id="textout" name="textout" rows=10" cols="40" placeholder="Decrypted text will appear here"></textarea>
+  </td>
+</tr></table></form>
+<div id="output">
+Drag a .L5X file onto this page, or open it in Notepad and paste its contents into the text box
+<br />
+</div>
+</body>
+</html>
