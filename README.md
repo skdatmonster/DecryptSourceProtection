@@ -4,6 +4,7 @@ DecryptSourceProtection
 Removes source protection from RSLogix 5000 .L5X files
 
 Directions using sk.dat:
+
 1. In RSLogix 5000, right click on the item to be decrypted and click export.
 2. Save the .L5X file to a folder
 3. Go to https://raw.github.com/skdatmonster/DecryptSourceProtection/master/decrypt.html and save file
@@ -14,6 +15,7 @@ Directions using sk.dat:
 8. Open "Configure Source Protection" and make sure it decrypts
 
 Directions using re-importing:
+
 1. In RSLogix 5000, right click on the item to be decrypted and click export.
 2. Save the .L5X file to a folder
 3. Go to https://raw.github.com/skdatmonster/DecryptSourceProtection/master/decrypt.html and save file
