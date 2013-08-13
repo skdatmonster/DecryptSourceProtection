@@ -5,11 +5,15 @@
 <title>RSLogix 5000 Source Protection Decryption</title>
 <script src="https://crypto-js.googlecode.com/svn/tags/3.1.2/build/rollups/aes.js"></script>
 <script src="https://crypto-js.googlecode.com/svn/tags/3.1.2/build/rollups/sha256.js"></script>
+<script src="https://crypto-js.googlecode.com/svn/tags/3.1.2/build/rollups/rc4.js"></script>
+<script src="https://crypto-js.googlecode.com/svn/tags/3.1.2/build/rollups/sha1.js"></script>
 <script src="https://crypto-js.googlecode.com/svn/tags/3.1.2/build/components/enc-utf16-min.js"></script>
 <script>
 "use strict";
-var xpath = "//EncodedData|//*[@EncodedSourceKey]";
-var keymatl = '\x59\x00\x53\x00\x33\x00\x3F\x00\x43\x00\x4E\x00\x21\x00\x40\x00\x42\x00\x73\x00\x49\x00\x74\x00\x39\x00\x6C\x00\x70\x00\x2D\x00\x3D\x00\x43\x00\x4A\x00\x32\x00\x30\x00\x65\x00\x4C\x00\x45\x00\x76\x00\x21\x00\x5A\x00\x64\x00\x49\x00\x53\x00\x33\x00\x25\x00\x68\x00\x52\x00\x6B\x00\x47\x00\x70\x00\x57\x00\x72\x00\x79\x00\x4F\x00\x59\x00\x21\x00\x6C\x00\x69\x00\x21\x00\x4C\x00\x2F\x00\x6E\x00\x38\x00\x5F\x00\x23\x00\x2A\x00\x76\x00\x34\x00\x2E\x00\x48\x00\x7A\x00\x57\x00\x48\x00\x2D\x00\x70\x00\x34\x00\x76\x00';
+var xpath = "//EncodedData|//*[@EncodedSourceKey]|//*[@SourceKey]";
+var keymatl3 = '\x59\x00\x53\x00\x33\x00\x3F\x00\x43\x00\x4E\x00\x21\x00\x40\x00\x42\x00\x73\x00\x49\x00\x74\x00\x39\x00\x6C\x00\x70\x00\x2D\x00\x3D\x00\x43\x00\x4A\x00\x32\x00\x30\x00\x65\x00\x4C\x00\x45\x00\x76\x00\x21\x00\x5A\x00\x64\x00\x49\x00\x53\x00\x33\x00\x25\x00\x68\x00\x52\x00\x6B\x00\x47\x00\x70\x00\x57\x00\x72\x00\x79\x00\x4F\x00\x59\x00\x21\x00\x6C\x00\x69\x00\x21\x00\x4C\x00\x2F\x00\x6E\x00\x38\x00\x5F\x00\x23\x00\x2A\x00\x76\x00\x34\x00\x2E\x00\x48\x00\x7A\x00\x57\x00\x48\x00\x2D\x00\x70\x00\x34\x00\x76\x00';
+var keymatl2 = CryptoJS.enc.Hex.parse('5D002C0031006800610031004500580054002900240051005A003A005200370065006900390041004B0028005D005D00570034004800630031005C006A0040');
+
 function print(text, color) {
   var output = document.getElementById('output');
   var span = document.createElement('span');
@@ -18,9 +22,10 @@ function print(text, color) {
   output.appendChild(span);
   output.appendChild(document.createElement('br'));
 }
-function decrypt(b64text, format) {
+
+function decrypt_3(b64text, format) {
   var ciphertext = CryptoJS.enc.Base64.parse(b64text);
-  var key = CryptoJS.SHA256(keymatl);
+  var key = CryptoJS.SHA256(keymatl3);
   var iv = CryptoJS.lib.WordArray.create([0, 0, 0, 0]);
   var options = {iv: iv, mode: CryptoJS.mode.CBC};
   var decryptor = CryptoJS.algo.AES.createDecryptor(key, options);
@@ -32,8 +37,24 @@ function decrypt(b64text, format) {
   }
   return plaintext;
 }
+
+function decrypt_2(b64text, format) {
+  var ciphertext = CryptoJS.enc.Base64.parse(b64text);
+  var hashed = CryptoJS.SHA1(keymatl2);
+  var key = CryptoJS.enc.Hex.parse(hashed.toString(CryptoJS.enc.Hex).slice(0, 10) + '0000000000000000000000');
+  var decryptor = CryptoJS.algo.RC4.createDecryptor(key);
+  var part1 = decryptor.process(ciphertext);
+  var part2 = decryptor.finalize();
+  var plaintext = part1.toString(format) + part2.toString(format);
+  if (plaintext.length == 0 && ciphertext.words.length > 0) {
+    print('Decryption was unsucessful', 'red');
+  }
+  return plaintext;
+}
+
 function patchXML(data) {
   try {
+    var encryptionConfig = 0;
     var doc = new DOMParser().parseFromString(data, 'application/xml');
     var flag = true;
     while (flag)
@@ -45,8 +66,14 @@ function patchXML(data) {
         continue;
       }
       if (element.tagName == 'EncodedData') {
-        if (element.getAttribute('EncryptionConfig') != '3') {
-          print('Warning: An unsupported EncryptionConfig value was found. Decryption may not work', 'orange');
+        var temp = element.getAttribute('EncryptionConfig');
+        if (temp == '3') {
+          encryptionConfig = 3;
+        } else if(temp == '2') {
+          encryptionConfig = 2;
+        } else {
+          print('Error: An unsupported EncryptionConfig value was found. (' + temp + ') Decryption of this file is not yet supported.', 'red');
+          return '';
         }
         var list = [];
         for (var i = 0; i < element.childNodes.length; i++) {
@@ -55,8 +82,20 @@ function patchXML(data) {
             list.push(child.nodeValue.replace(/\n/g, ''));
           }
         }
-        var decoded = decrypt(list.join(''), CryptoJS.enc.Utf16LE);
+        var decoded;
+        if (encryptionConfig == 3) {
+          decoded = decrypt_3(list.join(''), CryptoJS.enc.Utf16LE);
+        } else if (encryptionConfig == 2) {
+          decoded = decrypt_2(list.join(''), CryptoJS.enc.Utf16LE);
+          if (decoded.charCodeAt(decoded.length - 1) == 0) {
+            decoded = decoded.slice(0, decoded.length - 1);
+          }
+        }
         var subdoc = new DOMParser().parseFromString(decoded, 'application/xml');
+        if (subdoc.lastChild.tagName == 'parsererror') {
+          print('An XML parser error occurred, decryption may have been unsuccessful', 'red');
+          return '';
+        }
         for (var i = 0; i < subdoc.childNodes.length; i++) {
           var imported = doc.importNode(subdoc.childNodes[i], true);
           element.parentNode.insertBefore(imported, element);
@@ -64,7 +103,12 @@ function patchXML(data) {
         element.parentNode.removeChild(element);
         print('Unpacked encoded data', 'green');
       } else if (element.hasAttribute('EncodedSourceKey')) {
-        var decoded = decrypt(element.getAttribute('EncodedSourceKey'), CryptoJS.enc.Latin1);
+        var decoded;
+        if (encryptionConfig == 3) {
+          decoded = decrypt_3(element.getAttribute('EncodedSourceKey'), CryptoJS.enc.Latin1);
+        } else if (encryptionConfig == 2) {
+          decoded = decrypt_2(element.getAttribute('EncodedSourceKey'), CryptoJS.enc.Latin1);
+        }
         element.removeAttribute('EncodedSourceKey');
         if (element.hasAttribute('SourceProtectionType')) {
           element.removeAttribute('SourceProtectionType');
@@ -75,6 +119,18 @@ function patchXML(data) {
           element.setAttribute('EditedDate', date.toISOString());
         }
         print('Found source key: "' + decoded + '"', 'green');
+      } else if (element.hasAttribute('SourceKey')) {
+        var sk = element.getAttribute('SourceKey');
+        element.removeAttribute('SourceKey');
+        if (element.hasAttribute('SourceProtectionType')) {
+          element.removeAttribute('SourceProtectionType');
+        }
+        if (element.hasAttribute('EditedDate')) {
+          var date = new Date(element.getAttribute('EditedDate'));
+          date.setMilliseconds(1 + date.getMilliseconds());
+          element.setAttribute('EditedDate', date.toISOString());
+        }
+        print('Found source key: "' + sk + '"', 'green');
       }
     }
     return new XMLSerializer().serializeToString(doc);
@@ -84,6 +140,7 @@ function patchXML(data) {
     throw e;
   }
 }
+
 function handleDrop(event) {
   if (event.dataTransfer.files.length == 1) {
     var file = event.dataTransfer.files[0];
@@ -99,6 +156,7 @@ function handleDrop(event) {
     fr.readAsText(file);
   }
 }
+
 document.addEventListener('DOMContentLoaded', function(event) {
   document.getElementById('button').addEventListener('click', function(event) {
     var textin = document.getElementById('textin');
