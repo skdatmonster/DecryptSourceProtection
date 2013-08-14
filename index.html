@@ -172,6 +172,9 @@ document.addEventListener('DOMContentLoaded', function(event) {
     event.preventDefault();
     handleDrop(event);
   }, true);
+  if (!document.evaluate) {
+    print('Your browser does not support XPath, please try again with a modern browser', 'red')
+  }
 }, true);
 </script>
 </head>
