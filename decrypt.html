@@ -73,6 +73,10 @@ function patchXML(data) {
   try {
     var encryptionConfig = 0;
     var doc = new DOMParser().parseFromString(data, 'application/xml');
+    if (doc.getElementsByTagName('parsererror').length > 0) {
+      print('An XML parser error occurred, did you use a .L5X file?', 'red');
+      return '';
+    }
     var flag = true;
     while (flag)
     {
