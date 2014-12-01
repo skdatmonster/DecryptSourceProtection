@@ -14,6 +14,7 @@ var xpath = "//EncodedData|//*[@EncodedSourceKey]|//*[@SourceKey]";
 var keymatl3 = '\x59\x00\x53\x00\x33\x00\x3F\x00\x43\x00\x4E\x00\x21\x00\x40\x00\x42\x00\x73\x00\x49\x00\x74\x00\x39\x00\x6C\x00\x70\x00\x2D\x00\x3D\x00\x43\x00\x4A\x00\x32\x00\x30\x00\x65\x00\x4C\x00\x45\x00\x76\x00\x21\x00\x5A\x00\x64\x00\x49\x00\x53\x00\x33\x00\x25\x00\x68\x00\x52\x00\x6B\x00\x47\x00\x70\x00\x57\x00\x72\x00\x79\x00\x4F\x00\x59\x00\x21\x00\x6C\x00\x69\x00\x21\x00\x4C\x00\x2F\x00\x6E\x00\x38\x00\x5F\x00\x23\x00\x2A\x00\x76\x00\x34\x00\x2E\x00\x48\x00\x7A\x00\x57\x00\x48\x00\x2D\x00\x70\x00\x34\x00\x76\x00';
 var keymatl2 = CryptoJS.enc.Hex.parse('5D002C0031006800610031004500580054002900240051005A003A005200370065006900390041004B0028005D005D00570034004800630031005C006A0040');
 var keymatl5 = CryptoJS.enc.Hex.parse('5300340079005400560049005A007A00240063003E005700380026005D0078002F003B004F00550065003F00660051006F007A003300620063005700260042007B0031005A00240068002B006F00460033005C004C003D0023004B005E00650055002500580032007300480048002B0055003D004D0063004E0037002900');
+var keymatl6 = CryptoJS.enc.Hex.parse('277d3a6f747c647b457d587a502c7a5c4c793137617d24762e6a482a6f54433d553e746c6638655f504f682b68485d695e352c2a2d6f343e325a5d71262961');
 
 function print(text, color) {
   var output = document.getElementById('output');
@@ -22,6 +23,22 @@ function print(text, color) {
   span.appendChild(document.createTextNode(text));
   output.appendChild(span);
   output.appendChild(document.createElement('br'));
+}
+
+function decrypt_6(b64text, format) {
+  var ciphertext = CryptoJS.enc.Base64.parse(b64text);
+  ciphertext = CryptoJS.enc.Hex.parse(ciphertext.toString().slice(4));
+  var key = CryptoJS.SHA256(keymatl6);
+  var iv = CryptoJS.lib.WordArray.create([0, 0, 0, 0]);
+  var options = {iv: iv, mode: CryptoJS.mode.CBC};
+  var decryptor = CryptoJS.algo.AES.createDecryptor(key, options);
+  var part1 = decryptor.process(ciphertext);
+  var part2 = decryptor.finalize();
+  var plaintext = part1.toString(format) + part2.toString(format);
+  if (plaintext.length == 0 && ciphertext.words.length > 0) {
+    print('Decryption was unsuccessful', 'red');
+  }
+  return plaintext;
 }
 
 function decrypt_5(b64text, format) {
@@ -94,6 +111,8 @@ function patchXML(data) {
           encryptionConfig = 2;
         } else if (temp == '5') {
           encryptionConfig = 5;
+        } else if (temp == '6') {
+          encryptionConfig = 6;
         } else {
           print('Error: An unsupported EncryptionConfig value was found. (' + temp + ') Decryption of this file is not yet supported.', 'red');
           return '';
@@ -115,6 +134,8 @@ function patchXML(data) {
           }
         } else if (encryptionConfig == 5) {
           decoded = decrypt_5(list.join(''), CryptoJS.enc.Utf16LE);
+        } else if (encryptionConfig == 6) {
+          decoded = decrypt_6(list.join(''), CryptoJS.enc.Utf16LE);
         }
         var subdoc = new DOMParser().parseFromString(decoded, 'application/xml');
         if (subdoc.getElementsByTagName('parsererror').length > 0) {
@@ -145,7 +166,11 @@ function patchXML(data) {
           date.setMilliseconds(1 + date.getMilliseconds());
           element.setAttribute('EditedDate', date.toISOString());
         }
-        print('Found source key: "' + decoded + '"', 'green');
+        if (encryptionConfig == 6) {
+          print('Source key recovery is not supported for EncryptionConfig="6"', 'orange');
+        } else {
+          print('Found source key: "' + decoded + '"', 'green');
+        }
       } else if (element.hasAttribute('SourceKey')) {
         var sk = element.getAttribute('SourceKey');
         element.removeAttribute('SourceKey');
