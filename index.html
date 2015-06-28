@@ -12,7 +12,7 @@
 "use strict";
 var xpath = "//EncodedData|//*[@EncodedSourceKey]|//*[@SourceKey]";
 
-var keymatl1 = CryptoJS.enc.Hex.parse('44006F0075006700270073004500780070006F007200');
+var keymatl1 = CryptoJS.enc.Utf16LE.parse("Doug'sExportEncryption".slice(0, 11)); // Hi Doug
 var keymatl2 = CryptoJS.enc.Hex.parse('5D002C0031006800610031004500580054002900240051005A003A005200370065006900390041004B0028005D005D00570034004800630031005C006A0040');
 var keymatl3 = CryptoJS.enc.Hex.parse('5900530033003F0043004E0021004000420073004900740039006C0070002D003D0043004A003200300065004C004500760021005A0064004900530033002500680052006B00470070005700720079004F00590021006C00690021004C002F006E0038005F0023002A00760034002E0048007A00570048002D00700034007600');
 var keymatl5 = CryptoJS.enc.Hex.parse('5300340079005400560049005A007A00240063003E005700380026005D0078002F003B004F00550065003F00660051006F007A003300620063005700260042007B0031005A00240068002B006F00460033005C004C003D0023004B005E00650055002500580032007300480048002B0055003D004D0063004E0037002900');
@@ -206,7 +206,7 @@ function patchXML(data) {
         } else if (encryptionConfig == 7) {
           decoded = decrypt_7(list.join(''), CryptoJS.enc.Utf16LE);
         } else if (encryptionConfig == 8) {
-          decoded = decrypt_8(list.join(''), CryptoJS.enc.Latin1, true);
+          decoded = decrypt_8(list.join(''), CryptoJS.enc.Utf8, true);
         }
         var subdoc = new DOMParser().parseFromString(decoded, 'application/xml');
         if (subdoc.getElementsByTagName('parsererror').length > 0) {
